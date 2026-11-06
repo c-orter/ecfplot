@@ -1,0 +1,57 @@
+"""WGS84 Earth: ECF <-> geodetic conversion and the Earth surface trace."""
+
+import numpy as np
+import plotly.graph_objects as go
+
+A = 6378137.0  # WGS84 semi-major axis, metres
+F = 1 / 298.257223563  # flattening
+E2 = F * (2 - F)  # eccentricity squared
+R = A * (1 - F / 3)  # mean radius, for the sphere option
+UNITS = {"m": 1.0, "km": 1e3}
+OCEAN_COLOR = "#1f5fa8"
+LIGHTING = dict(
+    lighting=dict(ambient=0.55, diffuse=0.7, specular=0.1, roughness=0.9),
+    lightposition=dict(x=3e4, y=2e4, z=2e4),
+)
+
+
+def geodetic_to_ecf(lat, lon, alt=0.0, units="km", ellipsoid=True):
+    """Geodetic lat, lon (deg), alt -> ECF x, y, z. Lengths in `units`.
+    ellipsoid=False places points on the mean-radius sphere instead."""
+    a, e2 = (A, E2) if ellipsoid else (R, 0.0)
+    lat, lon = np.radians(lat), np.radians(lon)
+    n = a / UNITS[units] / np.sqrt(1 - e2 * np.sin(lat) ** 2)
+    x = (n + alt) * np.cos(lat) * np.cos(lon)
+    y = (n + alt) * np.cos(lat) * np.sin(lon)
+    z = (n * (1 - e2) + alt) * np.sin(lat)
+    return x, y, z
+
+
+def ecf_to_geodetic(x, y, z, units="km"):
+    """ECF x, y, z -> geodetic lat (deg), lon (deg), alt. Lengths in `units`."""
+    x, y, z = (np.asarray(v, float) for v in (x, y, z))
+    a = A / UNITS[units]
+    p = np.hypot(x, y)
+    lat = np.arctan2(z, p * (1 - E2))
+    for _ in range(5):  # error shrinks ~E2x per pass: sub-mm well before 5
+        n = a / np.sqrt(1 - E2 * np.sin(lat) ** 2)
+        lat = np.arctan2(z + E2 * n * np.sin(lat), p)
+    alt = p * np.cos(lat) + z * np.sin(lat) - a * np.sqrt(1 - E2 * np.sin(lat) ** 2)
+    return np.degrees(lat), np.degrees(np.arctan2(y, x)), alt
+
+
+def earth_trace(units="km", ellipsoid=True):
+    """Solid blue, non-hoverable Earth surface. Sphere uses the WGS84 mean radius."""
+    lat, lon = np.mgrid[-90:90:61j, -180:180:121j]  # 3-degree grid
+    x, y, z = geodetic_to_ecf(lat, lon, 0.0, units, ellipsoid)
+    return go.Surface(
+        x=x,
+        y=y,
+        z=z,
+        colorscale=[[0, OCEAN_COLOR], [1, OCEAN_COLOR]],
+        showscale=False,
+        hoverinfo="skip",
+        name="Earth",
+        showlegend=False,
+        **LIGHTING,
+    )
