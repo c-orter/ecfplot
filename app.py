@@ -35,11 +35,20 @@ LINKS = [
     (0, 6),
 ]  # station index pairs
 
+# each link: 25 points along the straight line between its stations, pushed out to
+# a radius 300 km above the equator's, which clears the ground and curves the link
+a, b = zip(*LINKS)
+p0, p1 = (STATIONS.iloc[list(i)][["x", "y", "z"]].to_numpy() for i in (a, b))
+chord = p0 + np.linspace(0, 1, 25)[:, None, None] * (p1 - p0)  # (25, links, 3)
+arcs = 6678 * chord / np.linalg.norm(chord, axis=2, keepdims=True)
+LINK_ARCS = pd.DataFrame(arcs.transpose(1, 0, 2).reshape(-1, 3), columns=list("xyz"))
+LINK_ARCS["link"] = np.repeat(np.arange(len(LINKS)), 25)
+
 ORBITS = pd.concat(
     [
         orbit("LEO-53", 6900, 53),
         orbit("Polar", 7200, 90),
-        orbit("GEO-ish", 42164, 5, spin=False),
+        orbit("GEO", 42164, 5),
     ],
     ignore_index=True,
 )
@@ -77,40 +86,25 @@ def build(layers, i):
     fig = eg.globe_figure()
 
     if "links" in layers:
-        a, b = zip(*LINKS)
-        s0, s1 = STATIONS.iloc[list(a)], STATIONS.iloc[list(b)]
-        fig = eg.arc_globe(
-            s0.lat,
-            s0.lon,
-            s1.lat,
-            s1.lon,
-            color=["Comm link"] * len(LINKS),
-            peak_alt=900,
-            line_width=3,
-            fig=fig,
+        fig = eg.line_globe(
+            LINK_ARCS, line_group="link", name="Comm link", line_width=3, fig=fig
         )
     if "orbits" in layers:
         fig = eg.line_globe(
             ORBITS, color="sat", hover_name="sat", hover_data=["t_min"], fig=fig
         )
     if "tracks" in layers:
-        gx, gy, gz = eg.geodetic_to_ecf(ORBITS.lat, ORBITS.lon, 0.0)
+        gx, gy, gz = eg.geodetic_to_ecf(
+            ORBITS.lat, ORBITS.lon, 10.0
+        )  # 10 km clears land
         tr = pd.DataFrame(dict(x=gx, y=gy, z=gz, sat=ORBITS.sat + " track"))
         fig = eg.line_globe(tr, color="sat", line_width=1, opacity=0.6, fig=fig)
 
     now = ORBITS[ORBITS.k == i]
     if "nadir" in layers:
-        gx, gy, gz = eg.geodetic_to_ecf(now.lat, now.lon, 0.0)
+        gx, gy, gz = eg.geodetic_to_ecf(now.lat, now.lon, 10.0)
         fig = eg.segment_globe(
-            now.x,
-            now.y,
-            now.z,
-            gx,
-            gy,
-            gz,
-            color=["Nadir"] * len(now),
-            line_width=2,
-            fig=fig,
+            x0=now.x, y0=now.y, z0=now.z, x1=gx, y1=gy, z1=gz, name="Nadir", fig=fig
         )
     if "cov" in layers:
         # synthetic covariance: 100 km everywhere, 400 km along the direction of travel

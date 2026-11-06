@@ -6,14 +6,14 @@ import pandas as pd
 import ecf_globe as eg
 
 
-def orbit(name, a_km, inc_deg, n=400, spin=True):
+def orbit(name, a_km, inc_deg, n=400):
     """Circular orbit in ECI, rotated into ECF by Earth rotation (so it spirals)."""
     t = np.linspace(0, 2 * np.pi * 1.5, n)
     inc = np.radians(inc_deg)
     x = a_km * np.cos(t)
     y = a_km * np.sin(t) * np.cos(inc)
     z = a_km * np.sin(t) * np.sin(inc)
-    th = -t * (0.0 if not spin else 1 / 15)  # crude Earth rotation relative to orbit
+    th = -t * (a_km / 42164) ** 1.5  # the Earth turns this much per orbit (GEO: all)
     xe, ye = x * np.cos(th) - y * np.sin(th), x * np.sin(th) + y * np.cos(th)
     return pd.DataFrame(dict(sat=name, x=xe, y=ye, z=z, t_min=t * 8))
 
@@ -23,7 +23,7 @@ def make_figure():
         [
             orbit("LEO-53", 6900, 53),
             orbit("Polar", 7200, 90),
-            orbit("GEO-ish", 42164, 5, spin=False),
+            orbit("GEO", 42164, 5),
         ],
         ignore_index=True,
     )

@@ -2,6 +2,7 @@
 
 import numpy as np
 import plotly.graph_objects as go
+from numpy.typing import ArrayLike
 
 A = 6378137.0  # WGS84 semi-major axis, metres
 F = 1 / 298.257223563  # flattening
@@ -16,8 +17,12 @@ LIGHTING = dict(
 NO_HIGHLIGHT = {axis: dict(highlight=False) for axis in "xyz"}
 
 
-def geodetic_to_ecf(lat, lon, alt=0.0, units="km"):
+def geodetic_to_ecf(
+    lat: ArrayLike, lon: ArrayLike, alt: ArrayLike = 0.0, units: str = "km"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Geodetic lat, lon (deg), alt -> ECF x, y, z. Lengths in `units`."""
+    if np.any(np.abs(lat) > 90):
+        raise ValueError("latitude beyond 90 degrees: are lat and lon swapped?")
     lat, lon = np.radians(lat), np.radians(lon)
     n = A / UNITS[units] / np.sqrt(1 - E2 * np.sin(lat) ** 2)
     x = (n + alt) * np.cos(lat) * np.cos(lon)
@@ -26,7 +31,9 @@ def geodetic_to_ecf(lat, lon, alt=0.0, units="km"):
     return x, y, z
 
 
-def ecf_to_geodetic(x, y, z, units="km"):
+def ecf_to_geodetic(
+    x: ArrayLike, y: ArrayLike, z: ArrayLike, units: str = "km"
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """ECF x, y, z -> geodetic lat (deg), lon (deg), alt. Lengths in `units`."""
     x, y, z = (np.asarray(v, float) for v in (x, y, z))
     a = A / UNITS[units]
@@ -39,7 +46,7 @@ def ecf_to_geodetic(x, y, z, units="km"):
     return np.degrees(lat), np.degrees(np.arctan2(y, x)), alt
 
 
-def earth_trace(units="km"):
+def earth_trace(units: str = "km") -> go.Surface:
     """Solid blue, non-hoverable WGS84 Earth surface."""
     lat, lon = np.mgrid[-90:90:61j, -180:180:121j]  # 3-degree grid
     x, y, z = geodetic_to_ecf(lat, lon, 0.0, units)

@@ -103,6 +103,7 @@ COAST = {
         (-45, -78), (-30, -77), (-15, -72), (0, -70), (20, -70),
         (40, -68), (60, -67), (70, -68), (90, -66), (110, -66),
         (135, -66), (150, -69), (165, -71), (170, -77), (180, -78),
+        (180, -90), (-180, -90),  # closed through the pole
     ],
     "Madagascar": [
         (49.3, -12), (50.5, -15.5), (47, -25), (44, -24.5), (43.5, -21),
@@ -190,7 +191,7 @@ def _split(t, step):
 
 
 @lru_cache  # ~0.4 s; call land_trace.cache_clear() after changing COAST
-def land_trace(units="km"):
+def land_trace(units: str = "km") -> go.Mesh3d:
     """Filled COAST outlines as a non-hoverable Mesh3d, 6 km above the surface.
 
     Each outline is triangulated in lon/lat, then the triangles are split to
@@ -199,9 +200,6 @@ def land_trace(units="km"):
     tris = []
     for outline in COAST.values():
         p = np.array(outline, float)
-        if abs(p[0, 0] - p[-1, 0]) > 180:  # spans every longitude: close via the pole
-            pole = -90 if p[:, 1].mean() < 0 else 90
-            p = np.vstack([p, [p[-1, 0], pole], [p[0, 0], pole]])
         for t in _ear_clip(p):
             tris += _split(p[list(t)], 4.0)
     # triangles share corners: send each point once and index it
