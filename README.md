@@ -25,6 +25,7 @@ fig.show()
 | `segment_globe(df, x0, y0, z0, x1, y1, z1)` | one segment per row, point 0 to point 1 |
 | `covariance_globe(x, y, z, cov)` | uncertainty ellipsoids from 3×3 ECF covariances |
 | `geodetic_to_ecf`, `ecf_to_geodetic` | WGS84 conversions |
+| `enu_matrix`, `ecf_to_enu`, `enu_to_ecf` | local east / north / up at a site: the rotation, and points to and from it |
 
 Each drawing function takes `fig=` to add to a globe and returns a new figure
 (the old one is untouched), `units="km"` or `"m"`, and, where it makes sense,
@@ -58,9 +59,12 @@ app.py                 layered demo app
   handling or time handling: rotate ECI data into ECF yourself (the gallery's
   `ecf_time_series` shows the rotation).
 - Hover shows the ECF position only (plus any `hover_name` / `hover_data`).
-- A covariance is ECF, in the position units squared. For one in another frame
-  (RIC, ...): `C_ecf = R @ C @ R.T`, where the columns of `R` are that frame's axes
-  written in ECF (see `ric_covariance`).
+- A covariance is ECF, in the position units squared. For one in local east /
+  north / up axes at an ECF position: `R = enu_matrix(x0, y0, z0)` and
+  `C_ecf = R.T @ C_enu @ R` (see `enu_covariance`). `ecf_to_enu` and `enu_to_ecf`
+  convert points to and from east, north, up around a site given as an ECF position,
+  which is what elevation masks and azimuths need (see `access`). Other frames
+  (RIC, ...) are up to you.
 
 **Things that look like bugs but aren't**
 - Draw lines and markers at least **10 km** above the surface. The continents are

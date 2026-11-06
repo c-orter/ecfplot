@@ -46,6 +46,54 @@ def ecf_to_geodetic(
     return np.degrees(lat), np.degrees(np.arctan2(y, x)), alt
 
 
+def enu_matrix(
+    x0: ArrayLike, y0: ArrayLike, z0: ArrayLike, units: str = "km"
+) -> np.ndarray:
+    """Rotation from ECF to local east, north, up at the ECF position x0, y0, z0.
+
+    (3, 3), or (..., 3, 3) for arrays. The rows are the east, north and up unit
+    vectors written in ECF ("up" is the ellipsoid normal, the usual ENU), so
+    `R @ v_ecf` is `v_enu`, and a covariance goes back with `C_ecf = R.T @ C_enu @ R`.
+    """
+    lat, lon, _ = ecf_to_geodetic(x0, y0, z0, units)
+    lat, lon = np.broadcast_arrays(np.radians(lat), np.radians(lon))
+    sl, cl, so, co = np.sin(lat), np.cos(lat), np.sin(lon), np.cos(lon)
+    east = np.stack([-so, co, 0 * so], -1)
+    north = np.stack([-sl * co, -sl * so, cl], -1)
+    up = np.stack([cl * co, cl * so, sl], -1)
+    return np.stack([east, north, up], -2)
+
+
+def ecf_to_enu(
+    x: ArrayLike,
+    y: ArrayLike,
+    z: ArrayLike,
+    x0: float,
+    y0: float,
+    z0: float,
+    units: str = "km",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """ECF points -> east, north, up from the site at the ECF position x0, y0, z0."""
+    rho = np.column_stack(np.broadcast_arrays(x, y, z)) - [x0, y0, z0]  # site to point
+    east, north, up = enu_matrix(x0, y0, z0, units) @ rho.T
+    return east, north, up
+
+
+def enu_to_ecf(
+    east: ArrayLike,
+    north: ArrayLike,
+    up: ArrayLike,
+    x0: float,
+    y0: float,
+    z0: float,
+    units: str = "km",
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """East, north, up from the site at the ECF position x0, y0, z0 -> ECF points."""
+    enu = np.column_stack(np.broadcast_arrays(east, north, up))
+    x, y, z = enu_matrix(x0, y0, z0, units).T @ enu.T + np.array([[x0], [y0], [z0]])
+    return x, y, z
+
+
 def earth_trace(units: str = "km") -> go.Surface:
     """Solid blue, non-hoverable WGS84 Earth surface."""
     lat, lon = np.mgrid[-90:90:61j, -180:180:121j]  # 3-degree grid

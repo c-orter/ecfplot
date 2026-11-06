@@ -232,8 +232,9 @@ def ecf_time_series():
 
 def access():
     """Access lines from a ground station, drawn only while the satellite is above a
-    10 degree elevation mask and coloured by range. Elevation and azimuth come from
-    the station's local up / east / north vectors, and show in the hover."""
+    10 degree elevation mask and coloured by range. ecf_to_enu gives each satellite
+    position as east / north / up from the station, which makes range, elevation and
+    azimuth one line each; the last two show in the hover."""
     t = np.linspace(0, 6 * np.pi, 600)
     inc = np.radians(51.6)
     X, Y = 6900 * np.cos(t), 6900 * np.sin(t) * np.cos(inc)
@@ -244,20 +245,15 @@ def access():
     )
 
     site = (55.8, 37.6)  # Moscow: the track passes close enough to see it
-    lat, lon = np.radians(site)
-    up = np.array([np.cos(lat) * np.cos(lon), np.cos(lat) * np.sin(lon), np.sin(lat)])
-    east = np.array([-np.sin(lon), np.cos(lon), 0.0])
-    north = np.cross(up, east)
-    station = np.array(eg.geodetic_to_ecf(*site, 10))
-    rho = sat - station  # station to satellite
-    rng = np.linalg.norm(rho, axis=1)
+    station = eg.geodetic_to_ecf(*site, 10)
+    east, north, up = eg.ecf_to_enu(sat[:, 0], sat[:, 1], sat[:, 2], *station)
     seen = pd.DataFrame(
         dict(
             x0=station[0], y0=station[1], z0=station[2],
             x1=sat[:, 0], y1=sat[:, 1], z1=sat[:, 2],
-            range=rng,
-            elevation=np.degrees(np.arcsin(rho @ up / rng)),
-            azimuth=np.degrees(np.arctan2(rho @ east, rho @ north)) % 360,
+            range=np.sqrt(east**2 + north**2 + up**2),
+            elevation=np.degrees(np.arctan2(up, np.hypot(east, north))),
+            azimuth=np.degrees(np.arctan2(east, north)) % 360,
         )
     )  # fmt: skip
     seen = seen[seen.elevation > 10]
@@ -301,21 +297,19 @@ def velocity_arrows():
     )  # fmt: skip
 
 
-def ric_covariance():
-    """A covariance given in the satellite's radial / in-track / cross-track (RIC)
-    frame, rotated into ECF with C_ecf = R C R^T, where the columns of R are the RIC
-    axes written in ECF. The arrows show the three axes."""
-    pos = np.array(eg.geodetic_to_ecf(15, 45, 800))
-    vel = np.array([1.0, 6.5, 3.0])  # ECF velocity (any direction not along pos)
-    radial = pos / np.linalg.norm(pos)
-    cross = np.cross(pos, vel) / np.linalg.norm(np.cross(pos, vel))
-    R = np.column_stack([radial, np.cross(cross, radial), cross])  # R, I, C in ECF
-    cov = R @ np.diag([200, 1200, 600]) ** 2 @ R.T  # 1 sigma: 200 / 1200 / 600 km
+def enu_covariance():
+    """A covariance given in local east / north / up axes, rotated into ECF with
+    C_ecf = R.T C R, where R = enu_matrix(x, y, z) at the object's ECF position has
+    the east, north and up unit vectors (written in ECF) as its rows. The arrows
+    show the three axes."""
+    pos = np.array(eg.geodetic_to_ecf(25, 105, 800))  # near the limb: "up" not end-on
+    R = eg.enu_matrix(*pos)
+    cov = R.T @ np.diag([600, 200, 1200]) ** 2 @ R  # 1 sigma: E 600, N 200, U 1200 km
     axes = pd.DataFrame(
         dict(
             x0=pos[0], y0=pos[1], z0=pos[2],
-            x1=pos[0] + 2000 * R[0], y1=pos[1] + 2000 * R[1], z1=pos[2] + 2000 * R[2],
-            axis=["Radial", "In-track", "Cross-track"],
+            x1=pos[0] + 2000 * R[:, 0], y1=pos[1] + 2000 * R[:, 1], z1=pos[2] + 2000 * R[:, 2],
+            axis=["East", "North", "Up"],
         )
     )  # fmt: skip
     fig = eg.covariance_globe(*pos, cov, sigma=1, name="Object (1 sigma)")
@@ -470,7 +464,7 @@ GROUPS = {
     "Basics": [points, lines, arrays],
     "Colour and hover": [categorical_color, numeric_color, hover, labelled_sites],
     "Geometry": [geodetic, segments, fan_out, swath, interpolated],
-    "Uncertainty": [covariance, covariance_many, ric_covariance],
+    "Uncertainty": [covariance, covariance_many, enu_covariance],
     "Astrodynamics": [
         ecf_time_series,
         access,
