@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 A = 6378137.0  # WGS84 semi-major axis, metres
 F = 1 / 298.257223563  # flattening
 E2 = F * (2 - F)  # eccentricity squared
-R = A * (1 - F / 3)  # mean radius, for the sphere option
 UNITS = {"m": 1.0, "km": 1e3}
 OCEAN_COLOR = "#1f5fa8"
 LIGHTING = dict(
@@ -15,15 +14,13 @@ LIGHTING = dict(
 )
 
 
-def geodetic_to_ecf(lat, lon, alt=0.0, units="km", ellipsoid=True):
-    """Geodetic lat, lon (deg), alt -> ECF x, y, z. Lengths in `units`.
-    ellipsoid=False places points on the mean-radius sphere instead."""
-    a, e2 = (A, E2) if ellipsoid else (R, 0.0)
+def geodetic_to_ecf(lat, lon, alt=0.0, units="km"):
+    """Geodetic lat, lon (deg), alt -> ECF x, y, z. Lengths in `units`."""
     lat, lon = np.radians(lat), np.radians(lon)
-    n = a / UNITS[units] / np.sqrt(1 - e2 * np.sin(lat) ** 2)
+    n = A / UNITS[units] / np.sqrt(1 - E2 * np.sin(lat) ** 2)
     x = (n + alt) * np.cos(lat) * np.cos(lon)
     y = (n + alt) * np.cos(lat) * np.sin(lon)
-    z = (n * (1 - e2) + alt) * np.sin(lat)
+    z = (n * (1 - E2) + alt) * np.sin(lat)
     return x, y, z
 
 
@@ -40,14 +37,14 @@ def ecf_to_geodetic(x, y, z, units="km"):
     return np.degrees(lat), np.degrees(np.arctan2(y, x)), alt
 
 
-def earth_trace(units="km", ellipsoid=True):
-    """Solid blue, non-hoverable Earth surface. Sphere uses the WGS84 mean radius."""
+def earth_trace(units="km"):
+    """Solid blue, non-hoverable WGS84 Earth surface."""
     lat, lon = np.mgrid[-90:90:61j, -180:180:121j]  # 3-degree grid
-    x, y, z = geodetic_to_ecf(lat, lon, 0.0, units, ellipsoid)
+    x, y, z = geodetic_to_ecf(lat, lon, 0.0, units)
     return go.Surface(
-        x=x,
-        y=y,
-        z=z,
+        x=np.round(x, 1),  # 0.1 km (or m): the JSON is a third the size
+        y=np.round(y, 1),
+        z=np.round(z, 1),
         colorscale=[[0, OCEAN_COLOR], [1, OCEAN_COLOR]],
         showscale=False,
         hoverinfo="skip",

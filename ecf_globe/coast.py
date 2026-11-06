@@ -186,7 +186,7 @@ def _split(t, step):
 
 
 @lru_cache  # ~0.4 s; call land_trace.cache_clear() after changing COAST
-def land_trace(units="km", ellipsoid=True):
+def land_trace(units="km"):
     """Filled COAST outlines as a non-hoverable Mesh3d, 6 km above the surface.
 
     Each outline is triangulated in lon/lat, then the triangles are split to
@@ -203,7 +203,7 @@ def land_trace(units="km", ellipsoid=True):
     # triangles share corners: send each point once and index it
     lonlat, corner = np.unique(np.vstack(tris), axis=0, return_inverse=True)
     lon, lat = lonlat.T
-    x, y, z = geodetic_to_ecf(lat, lon, 6e3 / UNITS[units], units, ellipsoid)
+    x, y, z = geodetic_to_ecf(lat, lon, 6e3 / UNITS[units], units)
     i, j, k = corner.reshape(-1, 3).T
     return go.Mesh3d(
         x=np.round(x, 1),  # 0.1 km (or m): halves the JSON

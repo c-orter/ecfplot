@@ -21,11 +21,11 @@ PALETTE = qualitative.D3[1:]  # D3 minus its blue, which vanishes on the Earth
 BG = "#0b0f1a"
 
 
-def globe_figure(units="km", ellipsoid=True, coast=True):
+def globe_figure(units="km", coast=True):
     """Empty globe: Earth, land, hidden axes, equal aspect, dark background."""
-    fig = go.Figure(earth_trace(units, ellipsoid))
+    fig = go.Figure(earth_trace(units))
     if coast:
-        fig.add_trace(land_trace(units, ellipsoid))
+        fig.add_trace(land_trace(units))
     hidden = dict(visible=False)
     fig.update_layout(
         margin=dict(l=0, r=0, t=0, b=0),
@@ -56,7 +56,6 @@ def scatter_globe(
     hover_name=None,
     hover_data=None,
     units="km",
-    ellipsoid=True,
     fig=None,
     name=None,
     opacity=1.0,
@@ -67,11 +66,11 @@ def scatter_globe(
 
     x, y, z    column names (with data_frame) or array-likes, in `units`.
     color      column/array. Text -> one legend entry per value;
-               numbers -> colorscale (markers only).
+               numbers -> colorscale and colorbar (markers only; lines stay flat).
     size       marker size: a number or a column/array.
     hover_name, hover_data   as in px; hover_data is a list of column names.
                Hover always shows ECF position and geodetic lat/lon/alt.
-    units      "km" or "m".   ellipsoid: False -> sphere.
+    units      "km" or "m".
     fig        globe to draw onto (it is copied, not changed).
     name       legend entry when color is not categorical.
     """
@@ -102,18 +101,22 @@ def scatter_globe(
         d["size"] = col(size)
 
     if fig is None:
-        fig = globe_figure(units, ellipsoid)
+        fig = globe_figure(units)
     if fig.layout.meta not in (None, units):
         raise ValueError(f"fig uses units={fig.layout.meta!r}, got units={units!r}")
     fig = go.Figure(fig)  # copy, like px
 
     # categorical color: one trace (and legend entry) per value
     categorical = color is not None and not is_numeric_dtype(d["color"])
-    groups = d.groupby("color", sort=False) if categorical else [(name, d)]
+    groups = (
+        d.groupby("color", sort=False, dropna=False)  # dropna: keep missing labels
+        if categorical
+        else [(name, d)]
+    )
     for k, (label, g) in enumerate(groups):
         flat = PALETTE[k % len(PALETTE)]
         marker = dict(color=flat, size=g.get("size", size))
-        if color is not None and not categorical:
+        if color is not None and not categorical and "markers" in mode:
             marker.update(
                 color=g["color"],
                 showscale=True,
