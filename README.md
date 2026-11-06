@@ -50,6 +50,8 @@ ecfplot/coast.py       hand-drawn continent outlines and their triangulation
 ecfplot/express.py     the plotting functions
 examples.py            example gallery app
 app.py                 layered demo app
+demo.py                smallest Dash example (also provides orbit() to the demo app)
+packages.md            package versions in the target Anaconda 2023.07 install
 ```
 
 ## Notes
@@ -79,6 +81,9 @@ app.py                 layered demo app
 - `steps=N` smooths with a spline; for points a few degrees apart. It runs low
   between points, by about 3 km at 5 degrees of spacing, 12 km at 10, 49 km at 20
   and 113 km at 30 (at a 6400 km radius), and it is not a great circle.
+- A plotly `go.Cone` (arrow heads) on the globe skews the automatic axis scaling and
+  stretches the Earth into an egg. Fix the axes to a cube, as `velocity_arrows` does:
+  `fig.update_layout(scene=dict(aspectmode="cube", xaxis_range=[-8000, 8000], ...))`.
 - Wrong units and swapped arguments are caught where cheaply possible: latitude
   beyond 90 degrees, km positions over 5 million km out, and a covariance that is
   not symmetric or positive semi-definite all raise.
