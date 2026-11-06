@@ -12,6 +12,8 @@ LIGHTING = dict(
     lighting=dict(ambient=0.55, diffuse=0.7, specular=0.1, roughness=0.9),
     lightposition=dict(x=3e4, y=2e4, z=2e4),
 )
+# plotly draws contour circles under the cursor on every Surface unless told not to
+NO_HIGHLIGHT = {axis: dict(highlight=False) for axis in "xyz"}
 
 
 def geodetic_to_ecf(lat, lon, alt=0.0, units="km"):
@@ -42,6 +44,7 @@ def earth_trace(units="km"):
     lat, lon = np.mgrid[-90:90:61j, -180:180:121j]  # 3-degree grid
     x, y, z = geodetic_to_ecf(lat, lon, 0.0, units)
     return go.Surface(
+        contours=NO_HIGHLIGHT,
         x=np.round(x, 1),  # 0.1 km (or m): the JSON is a third the size
         y=np.round(y, 1),
         z=np.round(z, 1),

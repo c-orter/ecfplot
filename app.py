@@ -21,7 +21,7 @@ STATIONS = pd.DataFrame(
     columns=["name", "lat", "lon"],
 )
 STATIONS[["x", "y", "z"]] = np.column_stack(
-    eg.geodetic_to_ecf(STATIONS.lat, STATIONS.lon, 0.0)
+    eg.geodetic_to_ecf(STATIONS.lat, STATIONS.lon, 8.0)
 )
 
 LINKS = [
@@ -49,6 +49,17 @@ ORBITS["lat"], ORBITS["lon"], ORBITS["alt"] = eg.ecf_to_geodetic(
 ORBITS["k"] = ORBITS.groupby("sat").cumcount()  # time-step index within each orbit
 N = ORBITS.k.max() + 1
 
+# a tracked object with its ECF position (km) and a full covariance (km^2);
+# the off-diagonal terms tilt the uncertainty ellipsoid
+OBJECT = eg.geodetic_to_ecf(20, -30, 800)
+OBJECT_COV = np.array(
+    [
+        [90_000, 60_000, 0],
+        [60_000, 160_000, 30_000],
+        [0, 30_000, 40_000],
+    ]
+)
+
 LAYERS = {
     "stations": "Ground stations",
     "links": "Station links (arcs)",
@@ -56,6 +67,7 @@ LAYERS = {
     "tracks": "Ground tracks",
     "sats": "Satellites (colour = altitude)",
     "nadir": "Nadir lines",
+    "cov": "Position uncertainty (3σ)",
 }
 
 
@@ -100,6 +112,16 @@ def build(layers, i):
             line_width=2,
             fig=fig,
         )
+    if "cov" in layers:
+        # synthetic covariance: 100 km everywhere, 400 km along the direction of travel
+        j = min(i, N - 2)  # the last step reuses the one before it
+        p0, p1 = (ORBITS[ORBITS.k == k][["x", "y", "z"]].to_numpy() for k in (j, j + 1))
+        t = (p1 - p0) / np.linalg.norm(p1 - p0, axis=1, keepdims=True)
+        cov = 100**2 * np.eye(3) + (400**2 - 100**2) * t[:, :, None] * t[:, None, :]
+        fig = eg.covariance_globe(
+            now.x, now.y, now.z, cov, name=(now.sat + " 3σ").tolist(), fig=fig
+        )
+        fig = eg.covariance_globe(*OBJECT, OBJECT_COV, name="Tracked object", fig=fig)
     if "sats" in layers:
         fig = eg.scatter_globe(
             now,

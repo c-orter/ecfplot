@@ -15,7 +15,7 @@ from pandas.api.types import is_numeric_dtype
 from plotly.colors import qualitative
 
 from .coast import land_trace
-from .earth import earth_trace, ecf_to_geodetic, geodetic_to_ecf
+from .earth import NO_HIGHLIGHT, earth_trace, ecf_to_geodetic, geodetic_to_ecf
 
 PALETTE = qualitative.D3[1:]  # D3 minus its blue, which vanishes on the Earth
 BG = "#0b0f1a"
@@ -44,6 +44,15 @@ def globe_figure(units="km", coast=True):
         ),
     )
     return fig
+
+
+def _canvas(fig, units):
+    """A copy of fig (or of a new globe), checked to use the same units."""
+    if fig is None:
+        fig = globe_figure(units)
+    if fig.layout.meta not in (None, units):
+        raise ValueError(f"fig uses units={fig.layout.meta!r}, got units={units!r}")
+    return go.Figure(fig)  # copy, like px
 
 
 def scatter_globe(
@@ -100,11 +109,7 @@ def scatter_globe(
     if np.ndim(size) or isinstance(size, str):
         d["size"] = col(size)
 
-    if fig is None:
-        fig = globe_figure(units)
-    if fig.layout.meta not in (None, units):
-        raise ValueError(f"fig uses units={fig.layout.meta!r}, got units={units!r}")
-    fig = go.Figure(fig)  # copy, like px
+    fig = _canvas(fig, units)
 
     # categorical color: one trace (and legend entry) per value
     categorical = color is not None and not is_numeric_dtype(d["color"])
@@ -184,3 +189,64 @@ def arc_globe(lat0, lon0, lat1, lon1, color=None, peak_alt=0.0, units="km", **kw
     lat, lon, _ = ecf_to_geodetic(*((1 - s) * p + s * q), units)
     x, y, z = geodetic_to_ecf(lat, lon, peak_alt * np.sin(np.pi * s), units)
     return _paths(x, y, z, color, units=units, **kw)
+
+
+def covariance_globe(
+    x, y, z, cov, sigma=3.0, name=None, units="km", fig=None, opacity=0.3
+):
+    """Uncertainty ellipsoids: a marker at each position, wrapped in the surface
+    that lies `sigma` standard deviations out for its covariance.
+
+    x, y, z    ECF position(s) in `units`: numbers, or one per object.
+    cov        ECF position covariance in `units` squared: (3, 3), or (n, 3, 3)
+               for n objects. A covariance in another frame (RIC, ...) has to be
+               rotated into ECF first.
+    sigma      ellipsoid size in standard deviations: 1 holds about 20% of a
+               3-D Gaussian, 3 about 97%.
+    name       legend label, or one per object. Clicking it toggles both parts.
+    fig        globe to draw onto (it is copied, not changed).
+    """
+    p = np.column_stack(np.broadcast_arrays(x, y, z)).astype(float)  # (n, 3)
+    cov = np.broadcast_to(cov, (len(p), 3, 3))
+    if name is None or isinstance(name, str):
+        name = [name or f"object {i}" for i in range(len(p))]
+    fig = _canvas(fig, units)
+    th, ph = np.mgrid[0 : np.pi : 25j, 0 : 2 * np.pi : 49j]
+    sphere = np.array([np.sin(th) * np.cos(ph), np.sin(th) * np.sin(ph), np.cos(th)])
+    for i, (c, s, label) in enumerate(zip(p, cov, name, strict=True)):
+        w, v = np.linalg.eigh(s)  # principal axes and variances along them
+        r = sigma * np.sqrt(np.clip(w, 0, None))  # semi-axis lengths
+        sx, sy, sz = c[:, None, None] + np.einsum("ij,jkl->ikl", v * r, sphere)
+        color = PALETTE[i % len(PALETTE)]
+        axes = ", ".join(f"{a:,.2f}" for a in r[::-1])
+        fig.add_trace(
+            go.Surface(
+                contours=NO_HIGHLIGHT,
+                x=sx,
+                y=sy,
+                z=sz,
+                opacity=opacity,
+                colorscale=[[0, color], [1, color]],
+                showscale=False,
+                name=label,
+                legendgroup=label,
+                showlegend=False,
+                hovertemplate=(
+                    f"<b>{label}</b><br>{sigma:g}σ semi-axes: {axes} {units}"
+                    "<extra></extra>"
+                ),
+            )
+        )
+        fig.add_trace(
+            go.Scatter3d(
+                x=[c[0]],
+                y=[c[1]],
+                z=[c[2]],
+                mode="markers",
+                marker=dict(color=color, size=4),
+                name=label,
+                legendgroup=label,
+                hoverinfo="skip",
+            )
+        )
+    return fig
