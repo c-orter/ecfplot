@@ -1,4 +1,4 @@
-# ecf_globe
+# ecfplot
 
 plotly-express-style plotting of ECF (Earth-fixed) coordinates on a 3-D globe.
 A WGS84 ellipsoid with low-poly continents, and a handful of functions that
@@ -8,10 +8,10 @@ Built for an offline Anaconda 2023.07 install (Python 3.11, plotly 5.9, numpy,
 pandas, dash 2.3). It needs nothing else.
 
 ```python
-import ecf_globe as eg
+import ecfplot as ep
 
-fig = eg.scatter_globe(df, x="x", y="y", z="z", color="sat", units="km")
-fig = eg.line_globe(df, color="sat", fig=fig)  # draw onto an existing globe
+fig = ep.scatter_globe(df, x="x", y="y", z="z", color="sat", units="km")
+fig = ep.line_globe(df, color="sat", fig=fig)  # draw onto an existing globe
 fig.show()
 ```
 
@@ -45,9 +45,9 @@ passes anything else to the plotly trace (`marker_symbol`, `line_dash`,
 ## Layout
 
 ```
-ecf_globe/earth.py     conversions, Earth surface
-ecf_globe/coast.py     hand-drawn continent outlines and their triangulation
-ecf_globe/express.py   the plotting functions
+ecfplot/earth.py       conversions, Earth surface
+ecfplot/coast.py       hand-drawn continent outlines and their triangulation
+ecfplot/express.py     the plotting functions
 examples.py            example gallery app
 app.py                 layered demo app
 ```

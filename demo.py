@@ -3,7 +3,7 @@
 import numpy as np
 import pandas as pd
 
-import ecf_globe as eg
+import ecfplot as ep
 
 
 def orbit(name, a_km, inc_deg, n=400):
@@ -27,9 +27,9 @@ def make_figure():
         ],
         ignore_index=True,
     )
-    fig = eg.line_globe(df, color="sat", hover_name="sat", hover_data=["t_min"])
-    gx, gy, gz = eg.geodetic_to_ecf(38.9, -77.0, 0.0)  # Washington DC
-    return eg.scatter_globe(x=[gx], y=[gy], z=[gz], size=8, name="Ground stn", fig=fig)
+    fig = ep.line_globe(df, color="sat", hover_name="sat", hover_data=["t_min"])
+    gx, gy, gz = ep.geodetic_to_ecf(38.9, -77.0, 0.0)  # Washington DC
+    return ep.scatter_globe(x=[gx], y=[gy], z=[gz], size=8, name="Ground stn", fig=fig)
 
 
 if __name__ == "__main__":

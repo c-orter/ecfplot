@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from dash import Dash, Input, Output, dcc, html
 
-import ecf_globe as eg
+import ecfplot as ep
 from demo import orbit
 
 # ---- synthetic data -------------------------------------------------------
@@ -21,7 +21,7 @@ STATIONS = pd.DataFrame(
     columns=["name", "lat", "lon"],
 )
 STATIONS[["x", "y", "z"]] = np.column_stack(
-    eg.geodetic_to_ecf(STATIONS.lat, STATIONS.lon, 8.0)
+    ep.geodetic_to_ecf(STATIONS.lat, STATIONS.lon, 8.0)
 )
 
 LINKS = [
@@ -52,7 +52,7 @@ ORBITS = pd.concat(
     ],
     ignore_index=True,
 )
-ORBITS["lat"], ORBITS["lon"], ORBITS["alt"] = eg.ecf_to_geodetic(
+ORBITS["lat"], ORBITS["lon"], ORBITS["alt"] = ep.ecf_to_geodetic(
     ORBITS.x, ORBITS.y, ORBITS.z
 )
 ORBITS["k"] = ORBITS.groupby("sat").cumcount()  # time-step index within each orbit
@@ -60,7 +60,7 @@ N = ORBITS.k.max() + 1
 
 # a tracked object with its ECF position (km) and a full covariance (km^2);
 # the off-diagonal terms tilt the uncertainty ellipsoid
-OBJECT = eg.geodetic_to_ecf(20, -30, 800)
+OBJECT = ep.geodetic_to_ecf(20, -30, 800)
 OBJECT_COV = np.array(
     [
         [90_000, 60_000, 0],
@@ -82,28 +82,28 @@ LAYERS = {
 
 # ---- figure ---------------------------------------------------------------
 def build(layers, i):
-    # each eg.* call returns a new figure (px semantics), so keep reassigning
-    fig = eg.globe_figure()
+    # each ep.* call returns a new figure (px semantics), so keep reassigning
+    fig = ep.globe_figure()
 
     if "links" in layers:
-        fig = eg.line_globe(
+        fig = ep.line_globe(
             LINK_ARCS, line_group="link", name="Comm link", line_width=3, fig=fig
         )
     if "orbits" in layers:
-        fig = eg.line_globe(
+        fig = ep.line_globe(
             ORBITS, color="sat", hover_name="sat", hover_data=["t_min"], fig=fig
         )
     if "tracks" in layers:
-        gx, gy, gz = eg.geodetic_to_ecf(
+        gx, gy, gz = ep.geodetic_to_ecf(
             ORBITS.lat, ORBITS.lon, 10.0
         )  # 10 km clears land
         tr = pd.DataFrame(dict(x=gx, y=gy, z=gz, sat=ORBITS.sat + " track"))
-        fig = eg.line_globe(tr, color="sat", line_width=1, opacity=0.6, fig=fig)
+        fig = ep.line_globe(tr, color="sat", line_width=1, opacity=0.6, fig=fig)
 
     now = ORBITS[ORBITS.k == i]
     if "nadir" in layers:
-        gx, gy, gz = eg.geodetic_to_ecf(now.lat, now.lon, 10.0)
-        fig = eg.segment_globe(
+        gx, gy, gz = ep.geodetic_to_ecf(now.lat, now.lon, 10.0)
+        fig = ep.segment_globe(
             x0=now.x, y0=now.y, z0=now.z, x1=gx, y1=gy, z1=gz, name="Nadir", fig=fig
         )
     if "cov" in layers:
@@ -112,12 +112,12 @@ def build(layers, i):
         p0, p1 = (ORBITS[ORBITS.k == k][["x", "y", "z"]].to_numpy() for k in (j, j + 1))
         t = (p1 - p0) / np.linalg.norm(p1 - p0, axis=1, keepdims=True)
         cov = 100**2 * np.eye(3) + (400**2 - 100**2) * t[:, :, None] * t[:, None, :]
-        fig = eg.covariance_globe(
+        fig = ep.covariance_globe(
             now.x, now.y, now.z, cov, name=(now.sat + " 3σ").tolist(), fig=fig
         )
-        fig = eg.covariance_globe(*OBJECT, OBJECT_COV, name="Tracked object", fig=fig)
+        fig = ep.covariance_globe(*OBJECT, OBJECT_COV, name="Tracked object", fig=fig)
     if "sats" in layers:
-        fig = eg.scatter_globe(
+        fig = ep.scatter_globe(
             now,
             color="alt",
             size=7,
@@ -127,7 +127,7 @@ def build(layers, i):
             fig=fig,
         )
     if "stations" in layers:
-        fig = eg.scatter_globe(
+        fig = ep.scatter_globe(
             STATIONS, color="name", size=5, hover_name="name", fig=fig
         )
     return fig

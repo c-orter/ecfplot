@@ -1,8 +1,8 @@
 """plotly-express-style ECF plotting over an Earth.
 
-    import ecf_globe as eg
-    fig = eg.scatter_globe(df, x="x", y="y", z="z", color="sat", units="km")
-    fig = eg.line_globe(df, x="x", y="y", z="z", color="sat", fig=fig)
+    import ecfplot as ep
+    fig = ep.scatter_globe(df, x="x", y="y", z="z", color="sat", units="km")
+    fig = ep.line_globe(df, x="x", y="y", z="z", color="sat", fig=fig)
 
 Every function returns a new go.Figure; pass `fig=` to draw onto an existing
 globe. The result works directly as the `figure=` of a dcc.Graph.
