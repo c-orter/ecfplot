@@ -286,7 +286,7 @@ def velocity_arrows():
         name="Velocity", line_width=4, fig=fig,
     )  # fmt: skip
     shade = fig.data[-1].line.color  # the velocity line's colour
-    return fig.add_trace(
+    fig.add_trace(
         go.Cone(
             x=tip[:, 0], y=tip[:, 1], z=tip[:, 2],
             u=arrow[::10, 0], v=arrow[::10, 1], w=arrow[::10, 2],
@@ -295,6 +295,13 @@ def velocity_arrows():
             hoverinfo="skip",
         )
     )  # fmt: skip
+    # a Cone trace skews the automatic axis scaling and stretches the globe
+    # (an egg), so fix the axes to a cube instead
+    return fig.update_layout(
+        scene=dict(
+            aspectmode="cube", **{f"{a}axis_range": [-8000, 8000] for a in "xyz"}
+        )
+    )
 
 
 def enu_covariance():
