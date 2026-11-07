@@ -73,14 +73,13 @@ def hover():
 
 
 def geodetic():
-    """Start from lat/lon/alt with geodetic_to_ecf; ecf_to_geodetic goes back. The
-    sites are 10 km up: the continents are drawn 6 km up, so anything at altitude 0
-    is hidden under them."""
+    """Start from lat/lon/alt with geodetic_to_ecf; ecf_to_geodetic goes back. Sites
+    at altitude 0 show on top of the continents."""
     cities = pd.DataFrame(
         [("Washington", 38.9, -77.0), ("Tokyo", 35.7, 139.7), ("Sydney", -33.9, 151.2)],
         columns=["city", "lat", "lon"],
     )
-    x, y, z = ep.geodetic_to_ecf(cities.lat, cities.lon, 10)
+    x, y, z = ep.geodetic_to_ecf(cities.lat, cities.lon, 0)
     cities = cities.assign(x=x, y=y, z=z)
     return ep.scatter_globe(cities, color="city", hover_name="city", size=7)
 
@@ -140,20 +139,9 @@ def swath():
     return ep.scatter_globe(x=source[0], y=source[1], z=source[2], size=8, fig=fig)
 
 
-def interpolated():
-    """steps=N smooths a sparse set of points: it adds N - 1 points between each pair
-    on a spline through them, and numeric columns follow too (here altitude, which
-    drives the marker colour). For points a few degrees apart, not distant ones."""
-    t = np.linspace(0, np.pi, 9)  # a sparse pass over the equator, rising and falling
-    r = 7000 + 1500 * np.sin(t)
-    pass_ = pd.DataFrame(dict(x=r * np.cos(t), y=r * np.sin(t), z=0.0))
-    pass_["alt"] = ep.ecf_to_geodetic(pass_.x, pass_.y, pass_.z)[2]
-    return ep.scatter_globe(pass_, color="alt", size=4, mode="lines+markers", steps=4)
-
-
 def covariance():
     """An uncertainty ellipsoid: sigma standard deviations out for an ECF covariance
-    (units squared). The off-diagonal terms tilt it. The legend entry toggles it."""
+    (km squared). The off-diagonal terms tilt it. The legend entry toggles it."""
     pos = ep.geodetic_to_ecf(20, -30, 800)
     cov = np.array(
         [[90_000, 60_000, 0], [60_000, 160_000, 30_000], [0, 30_000, 40_000]]
@@ -178,15 +166,6 @@ def composing():
     fig = ep.line_globe(orbit, name="Orbit", fig=fig)
     fig = ep.scatter_globe(x=[7000], y=[0], z=[0], size=9, name="Start", fig=fig)
     return ep.covariance_globe(7000, 0, 0, 500**2 * np.eye(3), fig=fig)
-
-
-def metres():
-    """units="m" changes the globe, the hover text and the conversions together.
-    A figure remembers its units; mixing them raises a ValueError."""
-    fig = ep.globe_figure(units="m")
-    return ep.scatter_globe(
-        x=[7_000_000], y=[0], z=[0], size=8, units="m", name="Sat", fig=fig
-    )
 
 
 def styling():
@@ -467,13 +446,171 @@ def labelled_sites():
     )  # fmt: skip
 
 
+def gto_transfer():
+    """Geostationary transfer orbit (GTO): a LEO parking orbit, an eccentric transfer
+    arc with perigee and apogee burns, and the circular GEO ring at 42,164 km."""
+    r_leo, r_geo = 6700.0, 42164.0
+    a, e = (r_leo + r_geo) / 2, (r_geo - r_leo) / (r_geo + r_leo)
+    nu = np.linspace(0, np.pi, 120)  # half-ellipse transfer arc
+    r = a * (1 - e**2) / (1 + e * np.cos(nu))
+    inc = np.radians(28.5)  # Cape Canaveral inclination
+    t = np.linspace(0, 2 * np.pi, 120)
+
+    leo = pd.DataFrame(
+        dict(
+            x=r_leo * np.cos(t),
+            y=r_leo * np.sin(t) * np.cos(inc),
+            z=r_leo * np.sin(t) * np.sin(inc),
+            phase="LEO Parking",
+        )
+    )
+    transfer = pd.DataFrame(
+        dict(
+            x=r * np.cos(nu),
+            y=r * np.sin(nu) * np.cos(inc),
+            z=r * np.sin(nu) * np.sin(inc),
+            phase="GTO Arc",
+        )
+    )
+    geo = pd.DataFrame(
+        dict(x=r_geo * np.cos(t), y=r_geo * np.sin(t), z=0.0, phase="GEO Target")
+    )
+    fig = ep.line_globe(pd.concat([leo, transfer, geo]), color="phase", line_width=3)
+    burns = pd.DataFrame(
+        [("Perigee Burn", r_leo, 0, 0), ("Apogee Burn", -r_geo, 0, 0)],
+        columns=["burn", "x", "y", "z"],
+    )
+    return ep.scatter_globe(burns, hover_name="burn", size=8, fig=fig)
+
+
+def eclipse():
+    """An orbit entering and exiting the Earth's shadow (cylindrical umbra): sunlit
+    segments are separated from eclipse. The arrow shows the Sun vector."""
+    t = np.linspace(0, 2 * np.pi, 240)
+    inc = np.radians(65.0)
+    orbit = pd.DataFrame(
+        dict(
+            x=7200 * np.cos(t),
+            y=7200 * np.sin(t) * np.cos(inc),
+            z=7200 * np.sin(t) * np.sin(inc),
+        )
+    )
+    sun = np.array([np.cos(np.radians(23.4)), 0.0, np.sin(np.radians(23.4))])
+    pos = orbit[["x", "y", "z"]].to_numpy()
+    along = pos @ sun
+    dist_sq = np.sum(pos**2, axis=1) - along**2
+    orbit["regime"] = np.where(
+        (along < 0) & (dist_sq < 6378.137**2), "Umbra (Eclipse)", "Sunlit"
+    )
+    orbit["segment"] = (orbit.regime != orbit.regime.shift()).cumsum()
+    fig = ep.line_globe(orbit, color="regime", line_group="segment", line_width=4)
+    sun_ray = pd.DataFrame(
+        dict(
+            x0=[0],
+            y0=[0],
+            z0=[0],
+            x1=[12000 * sun[0]],
+            y1=[12000 * sun[1]],
+            z1=[12000 * sun[2]],
+        )
+    )
+    return ep.segment_globe(sun_ray, name="Sun Vector", line_width=3, fig=fig)
+
+
+def crosslinks():
+    """Inter-satellite link (ISL) line-of-sight and occultation: line-of-sight
+    between constellation nodes is blocked when the ray passes through the Earth."""
+    t = np.linspace(0, 2 * np.pi, 8, endpoint=False)
+    sats = pd.DataFrame(
+        dict(
+            name=[f"Node {i + 1}" for i in range(8)],
+            x=7600 * np.cos(t),
+            y=7600 * np.sin(t),
+            z=0.0,
+        )
+    )
+    p = sats[["x", "y", "z"]].to_numpy()
+    links = []
+    r_earth = 6378.137 + 100.0  # Earth + 100 km atmospheric buffer
+    for i in range(len(sats)):
+        for j in range(i + 1, len(sats)):
+            p0, p1 = p[i], p[j]
+            v = p1 - p0
+            t_min = np.clip(-np.dot(p0, v) / np.dot(v, v), 0, 1)
+            d_min = np.linalg.norm(p0 + t_min * v)
+            links.append(
+                dict(
+                    x0=p0[0],
+                    y0=p0[1],
+                    z0=p0[2],
+                    x1=p1[0],
+                    y1=p1[1],
+                    z1=p1[2],
+                    status="Clear LOS" if d_min >= r_earth else "Occulted",
+                )
+            )
+    df = pd.DataFrame(links)
+    fig = ep.segment_globe(
+        df[df.status == "Clear LOS"], name="Active Link (LOS)", line_width=3
+    )
+    fig = ep.segment_globe(
+        df[df.status == "Occulted"],
+        name="Earth Occulted",
+        line_width=1,
+        trace_kw=dict(line=dict(dash="dot")),
+        fig=fig,
+    )
+    return ep.scatter_globe(sats, hover_name="name", size=7, fig=fig)
+
+
+def ground_network():
+    """Multi-station tracking and handover: Deep Space Network stations track a
+    high-eccentricity Molniya orbit, colored by the station with highest elevation."""
+    stations = pd.DataFrame(
+        [
+            ("Goldstone", 35.4, -116.9),
+            ("Madrid", 40.4, -4.2),
+            ("Canberra", -35.4, 149.0),
+        ],
+        columns=["name", "lat", "lon"],
+    )
+    sx, sy, sz = ep.geodetic_to_ecf(stations.lat, stations.lon, 10.0)
+    stations = stations.assign(x=sx, y=sy, z=sz)
+    t = np.linspace(0, 2 * np.pi, 240)
+    a, e, inc = 26600.0, 0.72, np.radians(63.4)
+    r = a * (1 - e**2) / (1 + e * np.cos(t - np.pi / 2))
+    sat_x, sat_y, sat_z = (
+        r * np.cos(t),
+        r * np.sin(t) * np.cos(inc),
+        r * np.sin(t) * np.sin(inc),
+    )
+    best_station = []
+    for i in range(len(t)):
+        active = "No contact"
+        best_el = 10.0
+        for _, st in stations.iterrows():
+            _, el, _ = ep.ecf_to_aer(sat_x[i], sat_y[i], sat_z[i], st.x, st.y, st.z)
+            if el > best_el:
+                best_el = el
+                active = st["name"]
+        best_station.append(active)
+    orbit = pd.DataFrame(dict(x=sat_x, y=sat_y, z=sat_z, contact=best_station))
+    orbit["segment"] = (orbit.contact != orbit.contact.shift()).cumsum()
+    fig = ep.line_globe(orbit, color="contact", line_group="segment", line_width=3)
+    return ep.scatter_globe(stations, hover_name="name", size=8, fig=fig)
+
+
 GROUPS = {
     "Basics": [points, lines, arrays],
     "Colour and hover": [categorical_color, numeric_color, hover, labelled_sites],
-    "Geometry": [geodetic, segments, fan_out, swath, interpolated],
+    "Geometry": [geodetic, segments, fan_out, swath],
     "Uncertainty": [covariance, covariance_many, enu_covariance],
     "Astrodynamics": [
         ecf_time_series,
+        gto_transfer,
+        eclipse,
+        crosslinks,
+        ground_network,
         access,
         velocity_arrows,
         fov_footprint,
@@ -481,7 +618,7 @@ GROUPS = {
         animation,
         axis_triad,
     ],
-    "The figure": [composing, metres, styling],
+    "The figure": [composing, styling],
 }
 EXAMPLES = [f for fs in GROUPS.values() for f in fs]
 BY_NAME = {f.__name__: f for f in EXAMPLES}
